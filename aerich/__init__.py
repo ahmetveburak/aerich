@@ -50,23 +50,42 @@ class Command:
             content=get_models_describe(self.app),
         )
 
-    async def upgrade(self, run_in_transaction: bool = True) -> List[str]:
-        migrated = []
+    async def _get_migration_files_to_upgrade(self) -> List[str]:
+        migration_files = []
         for version_file in Migrate.get_all_version_files():
             try:
                 exists = await Aerich.exists(version=version_file, app=self.app)
             except OperationalError:
                 exists = False
+
             if not exists:
-                app_conn_name = get_app_connection_name(self.tortoise_config, self.app)
-                if run_in_transaction:
-                    async with in_transaction(app_conn_name) as conn:
-                        await self._upgrade(conn, version_file)
-                else:
-                    app_conn = get_app_connection(self.tortoise_config, self.app)
-                    await self._upgrade(app_conn, version_file)
-                migrated.append(version_file)
-        return migrated
+                migration_files.append(version_file)
+
+        return migration_files
+
+    async def _run_in_transaction(self, files: List[str]) -> None:
+        app_conn_name = get_app_connection_name(self.tortoise_config, self.app)
+        migrated = []
+        async with in_transaction(app_conn_name) as conn:
+            for version_file in files:
+                await self._upgrade(conn, version_file)
+                migrated.append(f"Success upgrade {version_file}")
+
+        print("\n".join(migrated))
+
+    async def _run_without_transaction(self, files: List[str]) -> None:
+        app_conn = get_app_connection(self.tortoise_config, self.app)
+        for version_file in files:
+            await self._upgrade(app_conn, version_file)
+            print(f"Success upgrade {version_file}")
+
+    async def upgrade(self, run_in_transaction: bool = True) -> None:
+        migration_files = await self._get_migration_files_to_upgrade()
+
+        if run_in_transaction:
+            await self._run_in_transaction(migration_files)
+        else:
+            await self._run_without_transaction(migration_files)
 
     async def downgrade(self, version: int, delete: bool) -> List[str]:
         ret: List[str] = []
