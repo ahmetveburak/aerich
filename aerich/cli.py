@@ -83,12 +83,8 @@ async def migrate(ctx: Context, name, empty) -> None:
 @click.pass_context
 async def upgrade(ctx: Context, in_transaction: bool) -> None:
     command = ctx.obj["command"]
-    migrated = await command.upgrade(run_in_transaction=in_transaction)
-    if not migrated:
-        click.secho("No upgrade items found", fg=Color.yellow)
-    else:
-        for version_file in migrated:
-            click.secho(f"Success upgrade {version_file}", fg=Color.green)
+    # TODO: command output moved into the command itself but it requires a better design
+    await command.upgrade(run_in_transaction=in_transaction)
 
 
 @cli.command(help="Downgrade to specified version.")
